@@ -1,0 +1,55 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: leaderboard-db
+    environment:
+      POSTGRES_USER: leaderboard
+      POSTGRES_PASSWORD: leaderboard
+      POSTGRES_DB: leaderboard
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U leaderboard -d leaderboard"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - leaderboard-net
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: leaderboard-app
+    environment:
+      DATABASE_URL: "postgres://leaderboard:leaderboard@postgres:5432/leaderboard?sslmode=disable"
+      GRPC_PORT: "50051"
+      REST_PORT: "8080"
+      LOG_LEVEL: "info"
+      DEFAULT_LIMIT: "10"
+      MAX_LIMIT: "100"
+    ports:
+      - "50051:50051"
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - leaderboard-net
+    restart: unless-stopped
+    # Wait for database to be ready before starting
+    command: sh -c "/app/server"
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  leaderboard-net:
+    driver: bridge

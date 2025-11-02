@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package leaderboard.v1;
+
+option go_package = "github.com/yourorg/leaderboard/gen/leaderboard/v1;leaderboardv1";
+
+// A player's best score record.
+message ScoreEntry {
+  string player_name = 1;  // max 20 chars, ASCII recommended
+  int64  score = 2;        // non-negative
+  string updated_at = 3;   // RFC3339 timestamp
+}
+
+// Submit or update a player's score. Only improves if higher than current.
+message SubmitScoreRequest {
+  string player_name = 1;
+  int64  score = 2;
+}
+message SubmitScoreResponse {
+  bool   applied = 1;      // true if best score improved/created
+  ScoreEntry entry = 2;    // current best
+}
+
+// Get top scores (global).
+message GetTopScoresRequest {
+  int32  limit = 1;        // default 10, max 100
+  int32  offset = 2;       // pagination offset
+}
+message GetTopScoresResponse {
+  repeated ScoreEntry entries = 1;
+}
+
+// Get the rank for a player (1 = best). If not found, return not_found = true.
+message GetPlayerRankRequest {
+  string player_name = 1;
+}
+message GetPlayerRankResponse {
+  bool   not_found = 1;
+  int64  rank = 2;         // 1-based rank if found
+  ScoreEntry entry = 3;    // player's current best if found
+}
+
+// Subscribe to real-time leaderboard updates.
+// Server sends an initial snapshot (top N), then incremental changes as they happen.
+message SubscribeRequest {
+  int32 initial_limit = 1; // default 10
+}
+message LeaderboardUpdate {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    SNAPSHOT = 1; // initial full list
+    UPSERT   = 2; // a player's best improved or was inserted
+    DELETE   = 3; // optional: if admin deleted a player
+  }
+  Kind kind = 1;
+  repeated ScoreEntry snapshot = 2; // used when kind == SNAPSHOT
+  ScoreEntry changed = 3;           // used when kind == UPSERT or DELETE
+}
+
+service LeaderboardService {
+  rpc SubmitScore(SubmitScoreRequest) returns (SubmitScoreResponse);
+  rpc GetTopScores(GetTopScoresRequest) returns (GetTopScoresResponse);
+  rpc GetPlayerRank(GetPlayerRankRequest) returns (GetPlayerRankResponse);
+  rpc StreamLeaderboard(SubscribeRequest) returns (stream LeaderboardUpdate);
+}
